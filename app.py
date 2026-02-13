@@ -593,217 +593,153 @@ def main():
     inject_css()
     render_header()
     
-    config = get_config()
-    if not config.has_api_key and not config.get("skip_api_setup", False):
-        if not render_first_launch_setup(): return
-
-    # Session State Init
-    if "jobs" not in st.session_state:
-        st.session_state.jobs = {}
-    if "last_uploaded_files" not in st.session_state:
-        st.session_state.last_uploaded_files = []
-    if "total_cost" not in st.session_state:
-        st.session_state.total_cost = 0.0
-    if "uploader_key" not in st.session_state:
-        st.session_state.uploader_key = 0
-    if "active_file_list" not in st.session_state:
-        st.session_state.active_file_list = []
-
-    # Main Layout - STABLE GRID
-    # Row 1: Settings (Left) | File Uploader (Right - Fixed Height)
-    col_top_left, col_top_right = st.columns([1, 1], gap="large")
     
-    # --- TOP LEFT: Settings ---
-    with col_top_left:
-        # Match height of right side to ensure perfect grid alignment
-        with st.container(height=380, border=True):
-            mode, api_key = render_settings()
+    # --- AUTHENTICATION ---
+    import yaml
+    from yaml.loader import SafeLoader
+    import streamlit_authenticator as stauth
 
-    # --- TOP RIGHT: File Upload (Fixed Height Container) ---
-    with col_top_right:
-        # STRICT FIXED HEIGHT CONTAINER for the entire block
-        # This ensures the bottom section NEVER moves up or down
-        with st.container(height=380, border=True):
-            col_u1, col_u2 = st.columns([3, 1])
-            with col_u1:
-                st.markdown("### 📂 Drop Files")
-            with col_u2:
-                if st.button("🔄 Clear All", key="clear_btn", type="primary", use_container_width=True):
-                    st.session_state.jobs = {}
-                    st.session_state.minions = {
-                        i: {"status": "idle", "file": None, "progress": 0, "eta": 0, "cost": 0.0, "job_id": None}
-                        for i in range(4)
-                    }
-                    st.session_state.total_cost = 0.0
-                    st.session_state.last_uploaded_files = [] # Deprecated but kept just in case
-                    st.session_state.last_upload_signature = [] # Reset signature!
-                    
-                    # Force a hard reset of the uploader widget by incrementing its key
-                    st.session_state.uploader_key += 1
-                    st.rerun()
+    # Load Config
+    config_path = Path(__file__).parent / "auth_config.yaml"
+    with open(config_path) as file:
+        auth_config = yaml.load(file, Loader=SafeLoader)
 
-            uploaded_files = st.file_uploader(
-                "Drag & drop files here",
-                type=["pdf", "xlsx", "xls"],
-                accept_multiple_files=True,
-                label_visibility="collapsed",
-                key=f"uploader_{st.session_state.uploader_key}"
-            )
-            
-            if uploaded_files:
-                st.caption(f"📝 {len(uploaded_files)} files selected")
+    authenticator = stauth.Authenticate(
+        auth_config['credentials'],
+        auth_config['cookie']['name'],
+        auth_config['cookie']['key'],
+        auth_config['cookie']['expiry_days'],
+        None
+    )
 
-            # --- DISPLAY ACTIVE BATCH (Inside Fixed Container) ---
-            if st.session_state.active_file_list:
-                st.markdown("---")
-                st.caption(f"📂 **Active Batch ({len(st.session_state.active_file_list)} files)**")
-                # Use a scrollable container if list is long, but here simple list is fine
-                # Limit to 3 items to save space, with "+X more" if needed
-                display_list = st.session_state.active_file_list[:3]
-                for fname in display_list:
-                    st.text(f"• {fname}")
-                if len(st.session_state.active_file_list) > 3:
-                     st.caption(f"...and {len(st.session_state.active_file_list) - 3} more")
+    # Render Login
+    name, authentication_status, username = authenticator.login("main")
 
-    # --- ONE-SHOT INGESTION LOGIC ---
-    # The uploader is now an "Input Gate". 
-    # If files are present, we ingest them, clear the gate, and start a fresh batch.
-    
-
-    if uploaded_files:
-        # 1. NEW BATCH RECEIVED -> NUCLEAR RESET
-        st.session_state.jobs = {}
-        st.session_state.total_cost = 0.0
-        st.session_state.minions = {
-            i: {"status": "idle", "file": None, "progress": 0, "eta": 0, "cost": 0.0, "job_id": None}
-            for i in range(4)
-        }
+    if authentication_status is False:
+        st.error('Username/password is incorrect')
+    elif authentication_status is None:
+        st.warning('Please enter your username and password')
         
-        # 2. INGEST FILES & START JOBS
-        temp_dir = get_temp_dir()
-        new_batch_names = []
-        
-        for idx, up_file in enumerate(uploaded_files):
-            file_path = temp_dir / up_file.name
-            file_path.write_bytes(up_file.read())
-            new_batch_names.append(up_file.name)
+        # Sign Up Widget (Only show if not logged in)
+        try:
+            if authenticator.register_user('Register User', preauthorization=False):
+                st.success('User registered successfully')
+                # Save to file
+                with open(config_path, 'w') as file:
+                    yaml.dump(auth_config, file, default_flow_style=False)
+        except Exception as e:
+            st.error(e)
             
-            # Auto-submit
-            job_id = submit_job(file_path, mode, api_key)
-            st.session_state.jobs[job_id] = {
-                "file_name": up_file.name,
-                "status": "pending",
-                "results": None,
-                "start_time": datetime.now(),
-                "message": "Queued...",
-                "minion_id": idx % 4
+    if authentication_status:
+        # LOGGED IN SUCCESSFULLY
+        authenticator.logout('Logout', 'sidebar')
+        st.sidebar.write(f'Welcome *{name}*')
+        
+        # --- EXISTING APP LOGIC ---
+        # Session State Init
+        if "jobs" not in st.session_state:
+            st.session_state.jobs = {}
+        if "last_uploaded_files" not in st.session_state:
+            st.session_state.last_uploaded_files = []
+        if "total_cost" not in st.session_state:
+            st.session_state.total_cost = 0.0
+        if "uploader_key" not in st.session_state:
+            st.session_state.uploader_key = 0
+        if "active_file_list" not in st.session_state:
+            st.session_state.active_file_list = []
+
+        # Main Layout - STABLE GRID
+        # Row 1: Settings (Left) | File Uploader (Right - Fixed Height)
+        col_top_left, col_top_right = st.columns([1, 1], gap="large")
+        
+        # --- TOP LEFT: Settings ---
+        with col_top_left:
+            # Match height of right side to ensure perfect grid alignment
+            with st.container(height=380, border=True):
+                mode, api_key = render_settings()
+
+        # --- TOP RIGHT: File Upload (Fixed Height Container) ---
+        with col_top_right:
+            # STRICT FIXED HEIGHT CONTAINER for the entire block
+            # This ensures the bottom section NEVER moves up or down
+            with st.container(height=380, border=True):
+                col_u1, col_u2 = st.columns([3, 1])
+                with col_u1:
+                    st.markdown("### 📂 Drop Files")
+                with col_u2:
+                    if st.button("🔄 Clear All", key="clear_btn", type="primary", use_container_width=True):
+                        st.session_state.jobs = {}
+                        st.session_state.minions = {
+                            i: {"status": "idle", "file": None, "progress": 0, "eta": 0, "cost": 0.0, "job_id": None}
+                            for i in range(4)
+                        }
+                        st.session_state.total_cost = 0.0
+                        st.session_state.last_uploaded_files = [] # Deprecated but kept just in case
+                        st.session_state.last_upload_signature = [] # Reset signature!
+                        
+                        # Force a hard reset of the uploader widget by incrementing its key
+                        st.session_state.uploader_key += 1
+                        st.rerun()
+
+                uploaded_files = st.file_uploader(
+                    "Drag & drop files here",
+                    type=["pdf", "xlsx", "xls"],
+                    accept_multiple_files=True,
+                    label_visibility="collapsed",
+                    key=f"uploader_{st.session_state.uploader_key}"
+                )
+                
+                if uploaded_files:
+                    st.caption(f"📝 {len(uploaded_files)} files selected")
+
+                # --- DISPLAY ACTIVE BATCH (Inside Fixed Container) ---
+                if st.session_state.active_file_list:
+                    st.markdown("---")
+                    st.caption(f"📂 **Active Batch ({len(st.session_state.active_file_list)} files)**")
+                    # Use a scrollable container if list is long, but here simple list is fine
+                    # Limit to 3 items to save space, with "+X more" if needed
+                    display_list = st.session_state.active_file_list[:3]
+                    for fname in display_list:
+                        st.text(f"• {fname}")
+                    if len(st.session_state.active_file_list) > 3:
+                        st.caption(f"...and {len(st.session_state.active_file_list) - 3} more")
+
+        # --- ONE-SHOT INGESTION LOGIC ---
+        # The uploader is now an "Input Gate". 
+        # If files are present, we ingest them, clear the gate, and start a fresh batch.
+        
+
+        if uploaded_files:
+            # 1. NEW BATCH RECEIVED -> NUCLEAR RESET
+            st.session_state.jobs = {}
+            st.session_state.total_cost = 0.0
+            st.session_state.minions = {
+                i: {"status": "idle", "file": None, "progress": 0, "eta": 0, "cost": 0.0, "job_id": None}
+                for i in range(4)
             }
             
-            # Update minion state
-            minion_id = idx % 4
-            st.session_state.minions[minion_id] = {
-                "status": "reading",
-                "file": up_file.name,
-                "progress": 0.05,
-                "eta": 30,
-                "cost": 0.0,
-                "job_id": job_id
-            }
+            # 2. INGEST FILES & START JOBS
+            temp_dir = get_temp_dir()
+            new_batch_names = []
             
-        # 3. UPDATE ACTIVE LIST & CLEAR INPUT GATE
-        st.session_state.active_file_list = new_batch_names
-        st.session_state.uploader_key += 1 # Forces uploader to clear
-        st.rerun()
-
-
-    st.markdown("---") # Visual separator
-
-    # Row 2: BossMan/Minions (Left) | Results (Right)
-    col_bot_left, col_bot_right = st.columns([1, 1], gap="large")
-
-    # --- BOTTOM LEFT: Worker Panel ---
-    with col_bot_left:
-        render_worker_panel()
-
-    # --- BOTTOM RIGHT: Results (will be filled later) ---
-    
-
-
-    # --- BOTTOM RIGHT: Results ---
-    with col_bot_right:
-
-        # 1. INITIALIZE TEMPLATES (Empty / Header Only)
-        # This ensures something is ALWAYS displayed, even while processing
-        excel_text_display = f"""{'Income Statement':<24}\t{'Revenue':<18}\t{'Net Income':<18}\t{'Depreciation':<18}
-\t\t\t
-\t\t\t
-\t\t\t
-
-{'Balance Sheet':<24}\t{'Assets':<18}\t{'Liabilities':<18}
-\t\t
-\t\t
-\t\t
-
-{'Cash Flow':<24}\t{'TOTAL CPLTD':<18}
-\t
-\t
-\t"""
-
-        excel_text_clipboard = """Income Statement\tRevenue\tNet Income\tDepreciation
-\t\t\t
-\t\t\t
-\t\t\t
-
-Balance Sheet\tAssets\tLiabilities
-\t\t
-\t\t
-\t\t
-
-Cash Flow\tTOTAL CPLTD
-\t
-\t
-\t"""
-
-        # 2. CHECK PROCESSING STATUS & UPDATE JOBS
-        processing_ids = [jid for jid, j in st.session_state.jobs.items() if j["status"] not in ["complete", "error"]]
-        
-        # Update state but DO NOT RERUN YET. Wait until after rendering.
-        if processing_ids:
-            for jid in processing_ids:
-                status = check_job_status(jid)
-                job = st.session_state.jobs[jid]
-                job["status"] = status["state"]
-                job["progress"] = status.get("progress", 0)
-                job["message"] = status.get("message", "Processing...")
+            for idx, up_file in enumerate(uploaded_files):
+                file_path = temp_dir / up_file.name
+                file_path.write_bytes(up_file.read())
+                new_batch_names.append(up_file.name)
                 
-                # Update minion status based on job progress
-                minion_id = job.get("minion_id", 0)
-                progress = status.get("progress", 0)
+                # Auto-submit
+                job_id = submit_job(file_path, mode, api_key)
+                st.session_state.jobs[job_id] = {
+                    "file_name": up_file.name,
+                    "status": "pending",
+                    "results": None,
+                    "start_time": datetime.now(),
+                    "message": "Queued...",
+                    "minion_id": idx % 4
+                }
                 
-                # Map progress to minion status
-                if progress < 0.15:
-                    minion_status = "reading"
-                elif progress < 0.35:
-                    minion_status = "chewing"
-                elif progress < 0.85:
-                    minion_status = "processing"
-                elif progress < 1.0:
-                    minion_status = "thinking"
-                else:
-                    minion_status = "done"
-                
-                # Estimate ETA based on progress and elapsed time
-                start_time = job.get("start_time", datetime.now())
-                elapsed = (datetime.now() - start_time).total_seconds()
-                if progress > 0:
-                    eta = (elapsed / progress) - elapsed
-                else:
-                    eta = 30  # Default estimate
-                
-                # Calculate cost for this minion
-                method = status.get("data", {}).get("extraction_method", "none") if status["state"] == "complete" else "pending"
-                cost = 0.015 if method == "ai" else 0.0
-                
+                # Update minion state
+                minion_id = idx % 4
                 st.session_state.minions[minion_id] = {
                     "status": minion_status,
                     "file": job["file_name"],
@@ -813,165 +749,32 @@ Cash Flow\tTOTAL CPLTD
                     "job_id": jid
                 }
                 
+                # Force rerun if status changed to complete to show results immediately
                 if status["state"] == "complete":
-                    st.session_state.jobs[jid]["results"] = status.get("data")
-                    # Update cost
-                    method = status.get("data", {}).get("extraction_method", "none")
-                    cost_add = 0.015 if method == "ai" else 0.00
-                    st.session_state.total_cost += cost_add
-                    # Mark minion as done
-                    st.session_state.minions[minion_id]["status"] = "done"
-                    st.session_state.minions[minion_id]["progress"] = 1.0
-                    st.session_state.minions[minion_id]["eta"] = 0
-                    
-                elif status["state"] == "error":
-                    st.session_state.jobs[jid]["error_msg"] = status.get("message")
-                    st.session_state.minions[minion_id]["status"] = "error"
-
-        # 3. CONSOLIDATE DATA (If Ready)
-        completed_jobs = {jid: job for jid, job in st.session_state.jobs.items() if job["status"] == "complete"}
-        # processing_ids defined above
+                    job["results"] = status.get("data")
+                    st.rerun()
         
-        data_ready = False
-        if completed_jobs and not processing_ids:
-            # Merge all years data from all completed jobs
-            all_years = {}
-            for jid, job in completed_jobs.items():
-                results = job.get("results", {})
-                for yr in results.get("years", []):
-                    year_key = yr.get("year")
-                    if year_key not in all_years:
-                        all_years[year_key] = yr.copy()
-                    else:
-                        # Merge: take non-null values
-                        for key in ["revenue", "net_income", "depreciation", "assets", "liabilities", "total_cpltd"]:
-                            if yr.get(key) is not None and all_years[year_key].get(key) is None:
-                                all_years[year_key][key] = yr.get(key)
-            
-            if all_years:
-                # Sort years descending, take top 3
-                sorted_years = sorted(all_years.values(), key=lambda x: x.get("year", 0), reverse=True)[:3]
-                
-                # Generate strings
-                excel_text_display = generate_excel_string(sorted_years, pad=True)
-                excel_text_clipboard = generate_excel_string(sorted_years, pad=False)
-                data_ready = True
-        
-        # 4. RENDER UI
-        # First, render errors if any
-        error_jobs = {jid: job for jid, job in st.session_state.jobs.items() if job["status"] == "error"}
-        for jid, job in error_jobs.items():
-            st.error(f"❌ {job['file_name']}: {job.get('error_msg', 'Error')}")
-
-        st.markdown("### 📊 Consolidated Results")
-       
-        # Display the table (Empty or Full) - This is CRITICAL for layout stability
-        st.code(excel_text_display, language="text")
-        
-        # Render Copy Button if ready
-        if data_ready:
-            js_text = excel_text_clipboard.replace("\\", "\\\\").replace("\n", "\\n").replace("\t", "\\t").replace('"', '\\"')
-            
-            # --- ROBUST CLIENT-SIDE COPY ---
-            components.html(
-                f"""
-                <html>
-                <style>
-                    body {{ margin: 0; padding: 0; background: transparent; font-family: sans-serif; }}
-                    #copy-btn {{
-                        background: linear-gradient(90deg, #7c3aed, #6d28d9);
-                        color: white;
-                        border: 1px solid #8b5cf6;
-                        padding: 12px 20px;
-                        border-radius: 8px;
-                        font-size: 16px;
-                        font-weight: 600;
-                        cursor: pointer;
-                        width: 100%;
-                        transition: all 0.2s;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        gap: 8px;
-                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-                    }}
-                    #copy-btn:hover {{
-                        transform: translateY(-1px);
-                        box-shadow: 6px 8px -1px rgba(0, 0, 0, 0.2);
-                        filter: brightness(110%);
-                    }}
-                    #copy-btn:active {{
-                        transform: translateY(0);
-                    }}
-                </style>
-                <body>
-                    <button id="copy-btn" onclick="copyData()">
-                        <span>📋</span> Copy Results to Excel
-                    </button>
-                    <script>
-                        const textData = "{js_text}";
-                        
-                        function copyData() {{
-                            // Method 1: Modern API
-                            if (navigator.clipboard) {{
-                                navigator.clipboard.writeText(textData).then(() => {{
-                                    success();
-                                }}).catch(() => {{
-                                    fallbackCopy();
-                                }});
-                            }} else {{
-                                fallbackCopy();
-                            }}
-                        }}
-                        
-                        function fallbackCopy() {{
-                            // Method 2: Legacy TextArea hack
-                            const ta = document.createElement("textarea");
-                            ta.value = textData;
-                            ta.style.position = "fixed";
-                            ta.style.opacity = "0";
-                            document.body.appendChild(ta);
-                            ta.select();
-                            try {{
-                                document.execCommand("copy");
-                                success();
-                            }} catch (err) {{
-                                document.getElementById("copy-btn").innerText = "❌ Copy Failed";
-                            }}
-                            document.body.removeChild(ta);
-                        }}
-                        
-                        function success() {{
-                            const btn = document.getElementById("copy-btn");
-                            btn.innerHTML = "<span>✨</span> Copied Successfully!";
-                            btn.style.background = "#10b981"; // Green
-                            btn.style.borderColor = "#059669";
-                            setTimeout(() => {{
-                                btn.innerHTML = "<span>📋</span> Copy Again";
-                                btn.style.background = "linear-gradient(90deg, #7c3aed, #6d28d9)";
-                                btn.style.borderColor = "#8b5cf6";
-                            }}, 2000);
-                        }}
-                        
-                        // Attempt Auto-Copy on Load
-                        window.onload = function() {{
-                             setTimeout(copyData, 500);
-                        }};
-                    </script>
-                </body>
-                </html>
-                """,
-                height=60
-            )
-
+        # 3. RENDER RESULTS (Most recent complete job)
+        # Find most recent complete job
+        completed_jobs = [j for j in st.session_state.jobs.values() if j["status"] == "complete"]
+        if completed_jobs:
+            # Sort by start time desc
+            latest_job = sorted(completed_jobs, key=lambda x: x["start_time"], reverse=True)[0]
+            render_results(latest_job["results"], unique_key=latest_job["file_name"])
         else:
-            # Placeholder for layout stability
-            st.markdown("<div style='height: 50px;'></div>", unsafe_allow_html=True)
-
-        # 5. RERUN IF NEEDED (At the very end)
-        if processing_ids:
-            time.sleep(0.5)
-            st.rerun()
+            # Placeholder
+            st.markdown("""
+            <div style="
+                border: 2px dashed rgba(255,255,255,0.1); 
+                border-radius: 12px; 
+                padding: 4rem 2rem; 
+                text-align: center;
+                color: rgba(255,255,255,0.3);
+            ">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+                Results will appear here
+            </div>
+            """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":

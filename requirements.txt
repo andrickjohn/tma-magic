@@ -3,6 +3,8 @@
 streamlit>=1.28.0
 pandas>=2.0.0
 watchdog>=3.0.0
+streamlit-authenticator>=0.3.0
+pyyaml>=6.0
 
 # PDF Processing
 pypdf>=3.0.0

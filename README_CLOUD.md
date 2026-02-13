@@ -37,6 +37,15 @@ openai_api_key = "sk-..."
 ```
 3. Save.
 
+## 🔐 Authentication (New!)
+The app now includes a built-in Sign Up / Sign In system.
+
+### **Default Admin Credentials**
+- **Username:** `admin`
+- **Password:** `abc`
+
+> **Note:** On Streamlit Community Cloud (free tier), new user registrations are **ephemeral**. If the app goes to sleep or restarts, the user list may reset to the default `auth_config.yaml`. For permanent user storage, a database connection would be required.
+
 ## ⚠️ Known Limits
 - **Storage:** Files uploaded or generated are **temporary**. They will disappear if the app restarts.
 - **Memory:** 1GB Limit. Large PDFs (>50MB) may crash the worker.
