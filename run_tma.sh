@@ -6,10 +6,15 @@
 export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH
 
 # 1. Navigate to project root
-cd "/Users/john/Projects/test/TMA Project"
+cd "/Users/andrickjohn/Projects/TMA Project"
 
 # 2. Activate virtualenv
-source .venv/bin/activate
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
+else
+    echo "❌ Virtual environment .venv not found!"
+    exit 1
+fi
 
 # 3. SELF-HEALING: Kill anything on port 8501
 echo "🧹 Checking for zombie processes..."
@@ -24,7 +29,7 @@ echo "🚀 Starting Streamlit Server..."
 streamlit run app.py --server.port 8501 --server.headless true &
 SERVER_PID=$!
 
-# 5. Wait for server to be ready (dumb wait + check)
+# 5. Wait for server to be ready
 echo "⏳ Waiting for server to boot..."
 sleep 2
 
@@ -48,4 +53,3 @@ echo "✅ TMA MAGIC IS RUNNING (PID: $SERVER_PID)"
 echo "----------------------------------------"
 echo "Press [Ctrl+C] to stop, or just close this window."
 wait $SERVER_PID
-
