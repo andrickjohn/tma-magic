@@ -690,7 +690,11 @@ def render_worker_panel():
 
     # Fun boss status messages - based on ACTUAL progress
     import random
-    if not assigned_minions:
+    error_minions = [m for m in minions.values() if m["status"] == "error"]
+    
+    if error_minions:
+        boss_status = "❌ System Halt!"
+    elif not assigned_minions:
         boss_status = "😎 Chillin'"
     elif len(completed_minions) == len(assigned_minions) and len(assigned_minions) > 0:
         boss_status = "✅ All Done!"
@@ -707,7 +711,7 @@ def render_worker_panel():
     
     # === BOSSMAN BOX (centered, with progress bar) ===
     # Animate "Pump Iron" if any minions are assigned and not all done
-    boss_anim_class = "animate-pump" if assigned_minions and len(completed_minions) < len(assigned_minions) else ""
+    boss_anim_class = "animate-pump" if assigned_minions and not error_minions and len(completed_minions) < len(assigned_minions) else ""
     
     # Build Boss HTML string
     boss_html = f'<div style="background: linear-gradient(135deg, rgba(167,139,250,0.2), rgba(139,92,246,0.1)); border: 2px solid rgba(167,139,250,0.5); border-radius: 12px; padding: 1rem 1.5rem; margin: 1rem 0; text-align: center;"> <div style="font-size: 1.8rem; font-weight: 900; color: #a78bfa; margin-bottom: 0.5rem;"> 👔 TMA BossMan Overlord </div> <!-- PUMPING IRON GRAPHIC --> <div class="{boss_anim_class}">💪</div> <div style="font-size: 1.5rem; font-weight: 700; color: #ffffff; margin-bottom: 0.75rem;"> {boss_status} </div> <div style="display: flex; justify-content: center; align-items: center; gap: 2rem; flex-wrap: wrap; margin-bottom: 0.75rem;"> <div style="text-align: center;"> <div style="font-size: 1rem; color: rgba(255,255,255,0.6);">Progress</div> <div style="font-size: 1.3rem; font-weight: 600; color: #10b981;">{pct}%</div> </div> <div style="text-align: center;"> <div style="font-size: 1rem; color: rgba(255,255,255,0.6);">ETA</div> <div style="font-size: 1.3rem; font-weight: 600; color: #60a5fa;">{int(total_eta)}s</div> </div> <div style="text-align: center;"> <div style="font-size: 1rem; color: rgba(255,255,255,0.6);">Cost</div> <div style="font-size: 1.3rem; font-weight: 600; color: #fca5a5;">${total_cost:.5f}</div> </div> </div> <!-- Overall Progress Bar --> <div style="background: rgba(255,255,255,0.1); border-radius: 8px; height: 12px; width: 100%; overflow: hidden;"> <div style="background: linear-gradient(90deg, #a78bfa, #c4b5fd); height: 100%; width: {pct}%; transition: width 0.3s;"></div> </div> </div>'
@@ -726,7 +730,10 @@ def render_worker_panel():
         pct = int(progress * 100)  # Calculate pct first for display
         
         # Derive status from PROGRESS percentage, not stale status field
-        if not m.get("file"):
+        if m.get("status") == "error":
+            status = "error"
+            minion_class = "minion-idle"
+        elif not m.get("file"):
             status = "idle"
             minion_class = "minion-idle"
         elif pct >= 100:  # Use pct for cleaner comparisons
@@ -893,12 +900,20 @@ def main():
 
     # One-Shot Ingestion Logic (Prevent Looping)
     if uploaded_files:
-        # Reset jobs and minions for new batch
-        st.session_state.jobs = {}
-        st.session_state.total_cost = 0.0
-        st.session_state.minions = {i: {"status": "idle", "file": None, "progress": 0, "eta": 0, "cost": 0.0, "job_id": None} for i in range(4)}
-        
-        temp_dir = get_temp_dir()
+        # VALIDATE API KEY BEFORE STARTING
+        config = get_config()
+        needs_key = mode in ["ai_only", "hybrid"]
+        if needs_key and not api_key:
+            st.error("🛑 **API KEY REQUIRED**: AI Extraction cannot start without a key. Please enter your key in the **Settings** panel (top left) and try again.", icon="🔑")
+            st.session_state.uploader_key += 1 # Clear uploader to stop loop
+            # We don't rerun immediately so the error stays visible
+        else:
+            # Reset jobs and minions for new batch
+            st.session_state.jobs = {}
+            st.session_state.total_cost = 0.0
+            st.session_state.minions = {i: {"status": "idle", "file": None, "progress": 0, "eta": 0, "cost": 0.0, "job_id": None} for i in range(4)}
+            
+            temp_dir = get_temp_dir()
         for idx, up_file in enumerate(uploaded_files):
             file_path = temp_dir / up_file.name
             file_path.write_bytes(up_file.read())
