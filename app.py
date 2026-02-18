@@ -473,77 +473,77 @@ def render_results(data: dict, unique_key: str):
     display_text = generate_excel_string(years_data, pad=True)
     excel_tsv = generate_excel_string(years_data, pad=False)
     
-    # Use Base64 to safely transfer data
+    # Use Base64 to safely transfer the Excel data
     import base64
     b64_data = base64.b64encode(excel_tsv.encode('utf-8')).decode('utf-8')
     
     st.success("✅ Extraction Complete")
     
-    # Improved Copy Component
+    # Check if all jobs are actually finished (stable state)
+    all_done = all(j.get("status") == "complete" for j in st.session_state.jobs.values())
+    
     copy_html = f"""
-    <div style="margin: 0.5rem 0; font-family: sans-serif;">
-        <button id="proxyBtn" onclick="executeCopy()" style="
+    <div style="margin: 1rem 0; font-family: sans-serif;">
+        <button id="copyBtn" onclick="doCopy()" style="
             background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            color: white; border: none; padding: 0.75rem 2rem;
-            border-radius: 8px; font-size: 1rem; font-weight: 600;
-            cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-            display: flex; align-items: center; gap: 8px;
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 8px;
         ">
             📋 Copy Data to Clipboard
         </button>
-        <span id="statusMsg" style="margin-left: 1rem; color: #10b981; font-weight: 600;"></span>
+        <span id="copyMsg" style="margin-left: 1rem; color: #10b981; font-weight: 600;"></span>
     </div>
-    <input type="text" id="encodedData" value="{b64_data}" style="position: absolute; left: -9999px;">
-    
+    <textarea id="stash" style="position: absolute; left: -9999px;">{b64_data}</textarea>
     <script>
-    function executeCopy() {{
-        const b64 = document.getElementById('encodedData').value;
+    function doCopy() {{
+        const b64 = document.getElementById('stash').value;
         const text = atob(b64);
-        const status = document.getElementById('statusMsg');
+        const msg = document.getElementById('copyMsg');
         
-        // Strategy: Try selecting a visible-ish element
+        // Strategy: Create a temporary textarea for the copy operation
         const el = document.createElement('textarea');
         el.value = text;
-        el.setAttribute('readonly', '');
-        el.style.position = 'absolute';
-        el.style.left = '0'; 
-        el.style.top = '0';
-        el.style.width = '1px';
-        el.style.height = '1px';
-        el.style.opacity = '0.01';
         document.body.appendChild(el);
-        
-        el.focus();
         el.select();
         
         try {{
-            const success = document.execCommand('copy');
-            if (success) {{
-                status.textContent = '✅ Copied! Paste into Excel';
-                status.style.color = '#10b981';
-                setTimeout(() => {{ status.textContent = ''; }}, 4000);
+            if (document.execCommand('copy')) {{
+                msg.textContent = '✅ Copied! Paste into Excel';
+                setTimeout(() => {{ msg.textContent = ''; }}, 4000);
             }} else {{
-                status.textContent = '❌ Blocked - Click the button';
-                status.style.color = '#ef4444';
+                msg.textContent = '⚠️ Blocked - Click the button';
+                msg.style.color = '#ef4444';
             }}
         }} catch (err) {{
-            status.textContent = '❌ Error - Click the button';
-            status.style.color = '#ef4444';
+            console.error('Copy Error:', err);
         }}
         document.body.removeChild(el);
     }}
-    
-    // Auto-Copy Trigger
-    // We try multiple times with different delays
-    setTimeout(executeCopy, 300);
-    setTimeout(executeCopy, 1000);
+
+    // AUTO-COPY TRIGGER: 
+    // Only fire if the extraction is completely stable (all minions done)
+    if ({str(all_done).lower()}) {{
+        setTimeout(() => {{
+            // Programmatic click is the most reliable "auto" method in Chrome/Safari
+            const btn = document.getElementById('copyBtn');
+            if (btn) btn.click();
+        }}, 600);
+    }}
     </script>
     """
     
-    components.html(copy_html, height=70)
+    st.components.v1.html(copy_html, height=80)
     st.markdown("**👀 Preview:**")
     st.code(display_text, language="text")
-
 def get_funny_status(progress: float):
     """Return a funny status message based on progress."""
     if progress < 0.1: return "Reading pixels..."
