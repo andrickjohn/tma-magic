@@ -475,24 +475,20 @@ def render_results(data: dict, unique_key: str):
     
     st.success("✅ Extraction Complete")
     
-    # Properly escape HTML entities
+    # Properly escape HTML entities in the TSV data
     import html as html_module
     escaped_data = html_module.escape(excel_tsv)
     
-    # STABLE IDs: Based on data content, not time
-    # This ensures the script isn't killed by the 1-second refresh loop
+    # Using stable data hash to prevent iframe refresh loops
     data_hash = str(len(excel_tsv)) + "_" + str(hash(excel_tsv) % 100000)
-    area_id = f"copy_area_{data_hash}"
-    status_id = f"copy_status_{data_hash}"
+    status_id = f"status_{data_hash}"
+    area_id = f"data_{data_hash}"
+    btn_id = f"btn_{data_hash}"
     
-    # Use hex codes for emojis
-    icon_clipboard = "&#128203;" 
-    icon_check = "&#9989;"      
-    icon_cross = "&#10060;"      
-    
+    # Create the exact version you liked, with stable IDs
     copy_html = f"""
     <div style="margin: 1rem 0; font-family: sans-serif;">
-        <button id="copyBtn_{data_hash}" onclick="performCopy()" style="
+        <button id="{btn_id}" onclick="copyData()" style="
             background: linear-gradient(135deg, #10b981 0%, #059669 100%);
             color: white;
             border: none;
@@ -506,43 +502,30 @@ def render_results(data: dict, unique_key: str):
             align-items: center;
             gap: 8px;
         ">
-            <span>{icon_clipboard}</span> Copy Data to Clipboard
+            📋 Copy Data to Clipboard
         </button>
-        <span id="{status_id}" style="margin-left: 1rem; font-weight: 600;"></span>
+        <span id="{status_id}" style="margin-left: 1rem; color: #10b981; font-weight: 600;"></span>
     </div>
-    <textarea id="{area_id}" style="position: absolute; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0;">{escaped_data}</textarea>
+    <textarea id="{area_id}" style="position: absolute; left: -9999px;">{escaped_data}</textarea>
     <script>
-    function performCopy() {{
-        const textArea = document.getElementById('{area_id}');
+    function copyData() {{
+        const textarea = document.getElementById('{area_id}');
         const status = document.getElementById('{status_id}');
-        if (!textArea || !status) return;
+        if (!textarea || !status) return;
         
-        textArea.focus();
-        textArea.select();
-        textArea.setSelectionRange(0, 99999);
+        textarea.select();
+        textarea.setSelectionRange(0, 99999);
+        const successful = document.execCommand('copy');
         
-        try {{
-            const successful = document.execCommand('copy');
-            if (successful) {{
-                status.innerHTML = '{icon_check} Copied! Paste into Excel';
-                status.style.color = '#10b981';
-                setTimeout(() => {{ status.innerHTML = ''; }}, 4000);
-            }} else {{
-                status.innerHTML = '{icon_cross} Auto-copy blocked - click button';
-                status.style.color = '#ef4444';
-            }}
-        }} catch (err) {{
-            status.innerHTML = '{icon_cross} Error copying';
-            status.style.color = '#ef4444';
+        if (successful) {{
+            status.textContent = '✅ Copied! Paste into Excel';
+            setTimeout(() => {{ status.textContent = ''; }}, 4000);
         }}
     }}
-    
-    // Auto-copy with slight delay - now stable because IDs don't change until data does
+    // PROGRAMMATIC CLICK: Call the button automatically
     setTimeout(() => {{
-        if (!window.hasAutoCopied_{data_hash}) {{
-            performCopy();
-            window.hasAutoCopied_{data_hash} = true;
-        }}
+        const btn = document.getElementById('{btn_id}');
+        if (btn) btn.click();
     }}, 300);
     </script>
     """
@@ -550,7 +533,6 @@ def render_results(data: dict, unique_key: str):
     st.components.v1.html(copy_html, height=80)
     st.markdown("**👀 Preview:**")
     st.code(display_text, language="text")
-
 def get_funny_status(progress: float):
     """Return a funny status message based on progress."""
     if progress < 0.1: return "Reading pixels..."
