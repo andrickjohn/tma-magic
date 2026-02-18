@@ -893,13 +893,6 @@ def main():
             all_results = [j["results"] for j in completed_jobs]
             merged_data = merge_results(all_results)
             render_results(merged_data, unique_key="merged_results")
-        else:
-            st.markdown("""
-            <div style="border: 2px dashed rgba(255,255,255,0.1); border-radius: 12px; padding: 4rem 2rem; text-align: center; color: rgba(255,255,255,0.3);">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
-                Results will appear here
-            </div>
-            """, unsafe_allow_html=True)
     
     # Auto-refresh if jobs are still processing
     if polling_needed:
