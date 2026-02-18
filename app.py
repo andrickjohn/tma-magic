@@ -914,22 +914,22 @@ def main():
             st.session_state.minions = {i: {"status": "idle", "file": None, "progress": 0, "eta": 0, "cost": 0.0, "job_id": None} for i in range(4)}
             
             temp_dir = get_temp_dir()
-        for idx, up_file in enumerate(uploaded_files):
-            file_path = temp_dir / up_file.name
-            file_path.write_bytes(up_file.read())
-            job_id = submit_job(file_path, mode, api_key)
-            st.session_state.jobs[job_id] = {
-                "file_name": up_file.name,
-                "status": "pending",
-                "results": None,
-                "start_time": datetime.now(),
-                "message": "Queued...",
-                "minion_id": idx % 4
-            }
-        
-        # IMPORTANT: Increment key to clear uploader and avoid ingestion loop
-        st.session_state.uploader_key += 1
-        st.rerun()
+            for idx, up_file in enumerate(uploaded_files):
+                file_path = temp_dir / up_file.name
+                file_path.write_bytes(up_file.read())
+                job_id = submit_job(file_path, mode, api_key)
+                st.session_state.jobs[job_id] = {
+                    "file_name": up_file.name,
+                    "status": "pending",
+                    "results": None,
+                    "start_time": datetime.now(),
+                    "message": "Queued...",
+                    "minion_id": idx % 4
+                }
+            
+            # IMPORTANT: Increment key to clear uploader and avoid ingestion loop
+            st.session_state.uploader_key += 1
+            st.rerun()
 
     # Status Polling Logic
     polling_needed = False
