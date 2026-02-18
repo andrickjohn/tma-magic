@@ -145,9 +145,9 @@ def process_file(
     # 4. AI Extraction
     if use_ai:
         if not api_key:
-            log("AI requested but API key missing. Using available results.", 0.40)
+            log("⚠️ AI Analysis Required But API Key Missing.", 0.40)
             if not results:
-                raise ValueError("No API key provided and Regex extraction failed")
+                raise ValueError("API KEY REQUIRED: Visual analysis is needed for this document but no key was provided.")
         else:
             log("Starting AI visual analysis...", 0.40)
             if file_type == "pdf":

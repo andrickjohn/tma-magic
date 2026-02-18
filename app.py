@@ -750,9 +750,22 @@ def render_worker_panel():
         cost = m["cost"]
         file_display = m.get("file", "—")[:18] + "..." if m.get("file") and len(m.get("file", "")) > 18 else (m.get("file") or "—")
         
-        # Blinking dots for active (not idle, not done)
-        dots = '<span class="blink-dot">.</span><span class="blink-dot">.</span><span class="blink-dot">.</span>' if status in ["reading", "chewing", "processing", "thinking"] else ""
+        # Status logic
+        display_status = status.title()
+        status_color = "#94a3b8"
+        dots = ""
         
+        if status == "error":
+            display_status = "⚠️ Error"
+            status_color = "#f87171" # Bright red for visibility
+            # Use the actual job message for more detail if available
+            jid = m.get("job_id")
+            if jid and jid in jobs:
+                msg = jobs[jid].get("message", "")
+                if "API KEY" in msg.upper():
+                    display_status = "🔑 Key Required"
+        elif status in ["reading", "chewing", "processing", "thinking"]:
+            dots = '<span class="blink-dot">.</span><span class="blink-dot">.</span><span class="blink-dot">.</span>'
         
         # Build Minion HTML string with animated graphic
         minion_html = f'''<div style="display: flex; align-items: center; justify-content: space-between; padding: 0.7rem 0; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 1.1rem;">
@@ -763,8 +776,8 @@ def render_worker_panel():
                     <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5);">{file_display}</div>
                 </div>
             </div>
-            <div style="flex: 1; color: #94a3b8; font-weight: 500;">
-                {status.title()}{dots}
+            <div style="flex: 1.2; color: {status_color}; font-weight: 700;">
+                {display_status}{dots}
             </div>
             <div style="flex: 1; text-align: center;">
                 <div style="background: rgba(255,255,255,0.1); border-radius: 4px; height: 8px; width: 100%; overflow: hidden;">
