@@ -543,6 +543,8 @@ def render_results(data: dict, unique_key: str):
     components.html(copy_html, height=70)
     st.markdown("**👀 Preview:**")
     st.code(display_text, language="text")
+
+def get_funny_status(progress: float):
     """Return a funny status message based on progress."""
     if progress < 0.1: return "Reading pixels..."
     if progress < 0.3: return "Combobulating data..."
