@@ -547,8 +547,8 @@ def render_results(data: dict, unique_key: str):
     </script>
     """
     
-    st.components.v1.html(copy_html, height=80, key=f"clipboard_{data_hash}")
-    st.markdown("**�� Preview:**")
+    st.components.v1.html(copy_html, height=80)
+    st.markdown("**👀 Preview:**")
     st.code(display_text, language="text")
 
 def get_funny_status(progress: float):
