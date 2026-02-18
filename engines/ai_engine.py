@@ -77,7 +77,7 @@ Rules:
         with open(image_path, "rb") as f:
             return base64.b64encode(f.read()).decode("utf-8")
     
-    def extract_from_image(self, image_path: Path) -> Tuple[List[FinancialData], int]:
+    def extract_from_image(self, image_path: Path) -> Tuple[List[FinancialData], int, float]:
         """Extract financial data from a single image."""
         base64_image = self.encode_image(image_path)
         
@@ -102,17 +102,27 @@ Rules:
             temperature=0.1
         )
         
-        return self._parse_response(response.choices[0].message.content)
+        # Calculate cost (GPT-4o pricing: $5/1M input tokens, $15/1M output tokens)
+        # Vision requests have additional image tokens
+        usage = response.usage
+        input_cost = (usage.prompt_tokens / 1_000_000) * 5.0
+        output_cost = (usage.completion_tokens / 1_000_000) * 15.0
+        total_cost = input_cost + output_cost
+        
+        results, confidence = self._parse_response(response.choices[0].message.content)
+        return results, confidence, total_cost
     
-    def extract_from_pdf_pages(self, image_paths: List[Path]) -> Tuple[List[FinancialData], int]:
+    def extract_from_pdf_pages(self, image_paths: List[Path]) -> Tuple[List[FinancialData], int, float]:
         """Extract from multiple PDF page images."""
         all_results: Dict[int, FinancialData] = {}
         total_confidence = 0
+        total_cost = 0.0
         
         for image_path in image_paths:
             try:
-                results, confidence = self.extract_from_image(image_path)
+                results, confidence, cost = self.extract_from_image(image_path)
                 total_confidence += confidence
+                total_cost += cost
                 
                 for data in results:
                     if data.year not in all_results:
@@ -126,7 +136,7 @@ Rules:
                 continue
         
         avg_confidence = total_confidence // max(len(image_paths), 1)
-        return list(all_results.values()), avg_confidence
+        return list(all_results.values()), avg_confidence, total_cost
     
     def _merge_data(self, existing: FinancialData, new: FinancialData):
         """Merge new data into existing, preferring higher confidence."""

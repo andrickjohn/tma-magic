@@ -37,14 +37,25 @@ def update_status(
     state: str,
     progress: float,
     message: str,
-    data: Optional[Dict] = None
+    data: Optional[Dict] = None,
+    cost: float = 0.0,
+    start_time: Optional[datetime] = None
 ):
     """Write status update for UI polling."""
+    # Calculate ETA based on progress and elapsed time
+    eta = 0
+    if start_time and progress > 0.05:  # Only estimate after 5% progress
+        elapsed = (datetime.now() - start_time).total_seconds()
+        estimated_total = elapsed / progress
+        eta = max(0, int(estimated_total - elapsed))
+    
     status = {
         "state": state,
         "progress": progress,
         "message": message,
         "timestamp": datetime.now().isoformat(),
+        "cost": cost,
+        "eta": eta,
         "data": data
     }
     status_file.write_text(json.dumps(status, indent=2))
@@ -70,9 +81,15 @@ def process_file(
     Returns:
         Dict with extraction results
     """
-    def log(msg: str, progress: float = 0):
+    # Track cost and timing
+    start_time = datetime.now()
+    total_cost = 0.0
+    
+    def log(msg: str, progress: float = 0, cost: float = 0.0):
+        nonlocal total_cost
+        total_cost += cost
         if status_file:
-            update_status(status_file, "processing", progress, msg)
+            update_status(status_file, "processing", progress, msg, cost=total_cost, start_time=start_time)
         print(f"[{progress:.0%}] {msg}")
     
     
@@ -121,6 +138,10 @@ def process_file(
         (mode == "hybrid" and confidence < confidence_threshold)
     )
     
+    # Log if regex was sufficient (no AI cost)
+    if not use_ai and mode == "hybrid":
+        log(f"Regex extraction successful (confidence: {confidence}%) - No AI cost!", 0.40)
+    
     # 4. AI Extraction
     if use_ai:
         if not api_key:
@@ -139,9 +160,9 @@ def process_file(
                 # Note: We could iterate here for granular page progress if AIEngine supported it
                 # For now, we jump to 80% after AI is done since it's the longest step
                 ai_engine = AIEngine(api_key)
-                ai_results, ai_confidence = ai_engine.extract_from_pdf_pages(image_paths)
+                ai_results, ai_confidence, ai_cost = ai_engine.extract_from_pdf_pages(image_paths)
                 
-                log("AI analysis complete. Consolidating data...", 0.85)
+                log("AI analysis complete. Consolidating data...", 0.85, cost=ai_cost)
                 
                 if ai_confidence > confidence:
                     results = ai_results
@@ -161,7 +182,8 @@ def process_file(
         "extraction_method": extraction_method,
         "confidence": confidence,
         "years": [r.to_dict() for r in results],
-        "processed_at": datetime.now().isoformat()
+        "processed_at": datetime.now().isoformat(),
+        "total_cost": total_cost
     }
     
     log("Extraction complete!", 1.0)
@@ -216,7 +238,7 @@ def main():
                 api_key=job.get("api_key") or config.openai_api_key,
                 status_file=status_file
             )
-            update_status(status_file, "complete", 1.0, "Done", result)
+            update_status(status_file, "complete", 1.0, "Done", result, cost=result.get("total_cost", 0.0))
         
         except Exception as e:
             update_status(status_file, "error", 0, str(e))

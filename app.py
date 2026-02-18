@@ -181,6 +181,73 @@ code, pre, .stCode, [data-testid="stCode"] {
     font-size: 3rem; 
     margin-bottom: 0.5rem;
 }
+
+/* Minion Animations */
+@keyframes minion-work {
+    0%, 100% { transform: translateX(0) rotate(0deg); }
+    25% { transform: translateX(-3px) rotate(-5deg); }
+    75% { transform: translateX(3px) rotate(5deg); }
+}
+
+@keyframes minion-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.8; }
+}
+
+@keyframes minion-glow {
+    0%, 100% { filter: drop-shadow(0 0 3px rgba(16, 185, 129, 0.5)); }
+    50% { filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.9)); }
+}
+
+.minion-icon {
+    display: inline-block;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    position: relative;
+    margin-right: 8px;
+}
+
+.minion-idle {
+    background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.minion-working {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    animation: minion-work 1s infinite ease-in-out, minion-glow 2s infinite ease-in-out;
+    box-shadow: 0 2px 12px rgba(16, 185, 129, 0.5);
+}
+
+.minion-done {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    box-shadow: 0 2px 12px rgba(59, 130, 246, 0.5);
+    animation: minion-pulse 1.5s ease-in-out;
+}
+
+.minion-icon::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 6px;
+    height: 6px;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 10px 0 0 white;
+}
+
+.minion-icon::after {
+    content: '';
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 3px;
+    background: rgba(255,255,255,0.6);
+    border-radius: 2px;
+}
 </style>
 """
 
@@ -190,20 +257,36 @@ def inject_css():
 
 
 def render_header():
-    st.markdown("""
-    <div style="text-align: center; padding: 2rem 0;">
-        <h1 style="
-            font-size: 3.5rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #a5b4fc 0%, #c084fc 50%, #f0abfc 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 0.5rem;
-            text-shadow: 0 0 30px rgba(167, 139, 250, 0.5);
-        ">✨ TMA Magic Black Box</h1>
-        <p style="font-size: 1.2rem; opacity: 0.8; color: #e2e8f0;">
-            Premium Financial Data Extraction
-        </p>
+    # Use local TMA Icon.png file
+    import base64
+    from pathlib import Path
+    
+    icon_path = Path(__file__).parent / "TMA Icon.png"
+    if icon_path.exists():
+        with open(icon_path, "rb") as f:
+            icon_data = base64.b64encode(f.read()).decode()
+        icon_src = f"data:image/png;base64,{icon_data}"
+    else:
+        # Fallback to external URL if local file not found
+        icon_src = "https://i.ibb.co/ZMqYxNy/tma-magic-logo.png"
+    
+    st.markdown(f"""
+    <div style="display: flex; align-items: center; justify-content: center; padding: 1rem 0; gap: 1.5rem;">
+        <img src="{icon_src}" alt="TMA Magic" style="width: 80px; height: auto;" />
+        <div style="text-align: left;">
+            <h1 style="
+                font-size: 2.5rem;
+                font-weight: 800;
+                background: linear-gradient(135deg, #a5b4fc 0%, #c084fc 50%, #f0abfc 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                margin: 0;
+                line-height: 1.2;
+            ">TMA Magic Black Box</h1>
+            <p style="font-size: 1rem; opacity: 0.8; color: #e2e8f0; margin: 0.25rem 0 0 0;">
+                Premium Financial Data Extraction
+            </p>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -215,14 +298,18 @@ def check_job_status(job_id: str) -> dict:
     if status_file.exists():
         try:
             data = json.loads(status_file.read_text())
-            # Ensure "message" is always present
+            # Ensure required fields are always present
             if "message" not in data:
                 data["message"] = "Processing..."
+            if "cost" not in data:
+                data["cost"] = 0.0
+            if "eta" not in data:
+                data["eta"] = 0
             return data
         except json.JSONDecodeError:
-            return {"state": "processing", "progress": 0, "message": "Reading status..."}
+            return {"state": "processing", "progress": 0, "message": "Reading status...", "cost": 0.0, "eta": 0}
     
-    return {"state": "pending", "progress": 0, "message": "Initializing..."}
+    return {"state": "pending", "progress": 0, "message": "Initializing...", "cost": 0.0, "eta": 0}
 
 
 def submit_job(file_path: Path, mode: str, api_key: str = "") -> str:
@@ -284,15 +371,18 @@ def generate_excel_string(years_data, pad=False):
     # Helper to format row
     def row(c1, c2, c3, c4=None):
         if pad:
+            # Use ONLY spaces for visual alignment (no tabs)
             if c4 is not None:
-                return f"{c1:<24}\t{c2:<18}\t{c3:<18}\t{c4:<18}"
-            return f"{c1:<24}\t{c2:<18}\t{c3:<18}"
+                return f"{c1:<20}{c2:<20}{c3:<20}{c4:<20}"
+            return f"{c1:<20}{c2:<20}{c3:<20}"
         else:
+            # Use tabs for Excel pasting
             if c4 is not None:
                 return f"{c1}\t{c2}\t{c3}\t{c4}"
             return f"{c1}\t{c2}\t{c3}"
 
     # 1. Income Statement
+    # Format: [Income Statement] [Revenue] [Net Income] [Depreciation]
     lines.append(row("Income Statement", "Revenue", "Net Income", "Depreciation"))
     for yr in target_years:
         y = year_lookup.get(yr, {})
@@ -304,6 +394,7 @@ def generate_excel_string(years_data, pad=False):
     lines.append("")  # Blank line
     
     # 2. Balance Sheet
+    # Format: [Balance Sheet] [Assets] [Liabilities]
     lines.append(row("Balance Sheet", "Assets", "Liabilities"))
     for yr in target_years:
         y = year_lookup.get(yr, {})
@@ -314,7 +405,8 @@ def generate_excel_string(years_data, pad=False):
     lines.append("")  # Blank line
     
     # 3. Cash Flow
-    lines.append(row("Cash Flow", "TOTAL CPLTD", "")) # Empty 3rd col for alignment logic
+    # Format: [Cash Flow] [TOTAL CPLTD]
+    lines.append(row("Cash Flow", "TOTAL CPLTD", ""))
     for yr in target_years:
         y = year_lookup.get(yr, {})
         cpltd = format_excel_value(y.get("total_cpltd"))
@@ -323,6 +415,50 @@ def generate_excel_string(years_data, pad=False):
     return "\n".join(lines)
 
 
+
+def merge_results(all_results):
+    """Merge results from multiple files, combining data for the same years."""
+    if not all_results:
+        return {"years": []}
+    
+    # Group data by year
+    year_data = {}
+    
+    for result in all_results:
+        for year_entry in result.get("years", []):
+            year = year_entry.get("year")
+            if year not in year_data:
+                year_data[year] = {
+                    "year": year,
+                    "revenue": None,
+                    "net_income": None,
+                    "depreciation": None,
+                    "assets": None,
+                    "liabilities": None,
+                    "total_cpltd": None,
+                    "confidence": 0
+                }
+            
+            # Merge: prefer non-None values
+            for field in ["revenue", "net_income", "depreciation", "assets", "liabilities", "total_cpltd"]:
+                if year_entry.get(field) is not None:
+                    year_data[year][field] = year_entry.get(field)
+            
+            # Take highest confidence
+            year_data[year]["confidence"] = max(
+                year_data[year]["confidence"],
+                year_entry.get("confidence", 0)
+            )
+    
+    # Convert back to list and sort by year descending
+    merged_years = sorted(year_data.values(), key=lambda x: x["year"], reverse=True)
+    
+    return {
+        "success": True,
+        "years": merged_years,
+        "extraction_method": "merged",
+        "file_count": len(all_results)
+    }
 def render_results(data: dict, unique_key: str):
     """Display extraction results - simple and clean."""
     if not data or not data.get("years"):
@@ -333,16 +469,55 @@ def render_results(data: dict, unique_key: str):
     if not years_data:
         return
 
-    # Generate the Excel-ready string
-    excel_text = generate_excel_string(years_data)
+    # Generate both versions: padded for display, tab-separated for Excel
+    display_text = generate_excel_string(years_data, pad=True)
+    excel_tsv = generate_excel_string(years_data, pad=False)
     
     st.success("✅ Extraction Complete")
     
-    st.markdown("**📋 Ready for Excel** - Click copy button in top right:")
+    # Properly escape HTML entities in the TSV data
+    import html as html_module
+    escaped_data = html_module.escape(excel_tsv)
     
-    # Display as code block for easy copying
-    st.code(excel_text, language="text")
-
+    # Create a copy button with the data
+    copy_html = f"""
+    <div style="margin: 1rem 0;">
+        <button id="copyBtn" onclick="copyData()" style="
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        ">
+            📋 Copy Data to Clipboard
+        </button>
+        <span id="status" style="margin-left: 1rem; color: #10b981; font-weight: 600;"></span>
+    </div>
+    <textarea id="data" style="position: absolute; left: -9999px;">{escaped_data}</textarea>
+    <script>
+    function copyData() {{
+        const textarea = document.getElementById('data');
+        const status = document.getElementById('status');
+        textarea.select();
+        textarea.setSelectionRange(0, 99999);
+        document.execCommand('copy');
+        status.textContent = '✅ Copied! Paste into Excel';
+        setTimeout(() => {{ status.textContent = ''; }}, 3000);
+    }}
+    // Try auto-copy on load
+    setTimeout(() => {{ copyData(); }}, 200);
+    </script>
+    """
+    
+    components.html(copy_html, height=80)
+    
+    st.markdown("**👀 Preview:**")
+    # Display formatted preview
+    st.code(display_text, language="text")
 def get_funny_status(progress: float):
     """Return a funny status message based on progress."""
     if progress < 0.1: return "Reading pixels..."
@@ -485,23 +660,14 @@ def render_worker_panel():
     boss_html = f'<div style="background: linear-gradient(135deg, rgba(167,139,250,0.2), rgba(139,92,246,0.1)); border: 2px solid rgba(167,139,250,0.5); border-radius: 12px; padding: 1rem 1.5rem; margin: 1rem 0; text-align: center;"> <div style="font-size: 1.8rem; font-weight: 900; color: #a78bfa; margin-bottom: 0.5rem;"> 👔 TMA BossMan Overlord </div> <!-- PUMPING IRON GRAPHIC --> <div class="{boss_anim_class}">💪</div> <div style="font-size: 1.5rem; font-weight: 700; color: #ffffff; margin-bottom: 0.75rem;"> {boss_status} </div> <div style="display: flex; justify-content: center; align-items: center; gap: 2rem; flex-wrap: wrap; margin-bottom: 0.75rem;"> <div style="text-align: center;"> <div style="font-size: 1rem; color: rgba(255,255,255,0.6);">Progress</div> <div style="font-size: 1.3rem; font-weight: 600; color: #10b981;">{pct}%</div> </div> <div style="text-align: center;"> <div style="font-size: 1rem; color: rgba(255,255,255,0.6);">ETA</div> <div style="font-size: 1.3rem; font-weight: 600; color: #60a5fa;">{int(total_eta)}s</div> </div> <div style="text-align: center;"> <div style="font-size: 1rem; color: rgba(255,255,255,0.6);">Cost</div> <div style="font-size: 1.3rem; font-weight: 600; color: #fca5a5;">${total_cost:.5f}</div> </div> </div> <!-- Overall Progress Bar --> <div style="background: rgba(255,255,255,0.1); border-radius: 8px; height: 12px; width: 100%; overflow: hidden;"> <div style="background: linear-gradient(90deg, #a78bfa, #c4b5fd); height: 100%; width: {pct}%; transition: width 0.3s;"></div> </div> </div>'
     st.markdown(boss_html, unsafe_allow_html=True)
     
-    # === GREMLINS SECTION ===
-    st.markdown('<div style="font-size: 1.3rem; font-weight: 700; color: #94a3b8; margin-bottom: 0.75rem; text-align: center;">🤖 Gremlins</div>', unsafe_allow_html=True)
+    # === MINIONS SECTION ===
+    st.markdown('<div style="font-size: 1.3rem; font-weight: 700; color: #94a3b8; margin-bottom: 0.75rem; text-align: center;">🤖 Minions</div>', unsafe_allow_html=True)
     
-    # Gremlin names and emojis
-    gremlin_names = ["🔧 Gremlin 1", "⚡ Gremlin 2", "🔥 Gremlin 3", "💎 Gremlin 4"]
-    status_emojis = {
-        "idle": "💤",
-        "reading": "📖",
-        "chewing": "🍔", 
-        "processing": "⚙️",
-        "thinking": "🧠",
-        "done": "✅",
-        "error": "❌"
-    }
+    # Minion names
+    minion_names = ["Minion 1", "Minion 2", "Minion 3", "Minion 4"]
     
-    # Gremlin rows with larger fonts
-    for i, name in enumerate(gremlin_names):
+    # Minion rows with larger fonts and animated graphics
+    for i, name in enumerate(minion_names):
         m = minions[i]
         progress = m["progress"]
         pct = int(progress * 100)  # Calculate pct first for display
@@ -509,18 +675,23 @@ def render_worker_panel():
         # Derive status from PROGRESS percentage, not stale status field
         if not m.get("file"):
             status = "idle"
+            minion_class = "minion-idle"
         elif pct >= 100:  # Use pct for cleaner comparisons
             status = "done"
+            minion_class = "minion-done"
         elif pct < 15:
             status = "reading"
+            minion_class = "minion-working"
         elif pct < 35:
             status = "chewing"
+            minion_class = "minion-working"
         elif pct < 85:
             status = "processing"
+            minion_class = "minion-working"
         else:
             status = "thinking"
+            minion_class = "minion-working"
         
-        emoji = status_emojis.get(status, "💤")
         
         # Apply BOUNCE animation if active (working states only)
         # Excludes 'done' and 'idle' and 'error'
@@ -536,9 +707,30 @@ def render_worker_panel():
         dots = '<span class="blink-dot">.</span><span class="blink-dot">.</span><span class="blink-dot">.</span>' if status in ["reading", "chewing", "processing", "thinking"] else ""
         
         
-        # Build Minion HTML string
-        # UPDATED: Applied {anim_class} to the Name, removed from Emoji
-        minion_html = f'<div style="display: flex; align-items: center; justify-content: space-between; padding: 0.7rem 0; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 1.1rem;"> <div style="flex: 2; min-width: 120px;"> <div style="font-weight: 700; font-size: 1.1rem; color: #e2e8f0; display: inline-block;" class="{anim_class}">{name}</div> <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5);">{file_display}</div> </div> <div style="flex: 1; color: #94a3b8; font-weight: 500;"> <span>{emoji}</span> {status.title()}{dots} </div> <div style="flex: 1; text-align: center;"> <div style="background: rgba(255,255,255,0.1); border-radius: 4px; height: 8px; width: 100%; overflow: hidden;"> <div style="background: linear-gradient(90deg, #10b981, #34d399); height: 100%; width: {pct}%; transition: width 0.3s;"></div> </div> </div> <div style="flex: 0.8; text-align: right; color: #94a3b8; font-size: 1rem;"> {pct}% • {eta}s </div> <div style="flex: 0.5; text-align: right; color: #fca5a5; font-weight: 600;"> ${cost:.5f} </div> </div>'
+        # Build Minion HTML string with animated graphic
+        minion_html = f'''<div style="display: flex; align-items: center; justify-content: space-between; padding: 0.7rem 0; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 1.1rem;">
+            <div style="flex: 2; min-width: 140px; display: flex; align-items: center;">
+                <div class="minion-icon {minion_class}"></div>
+                <div>
+                    <div style="font-weight: 700; font-size: 1.1rem; color: #e2e8f0;" class="{anim_class}">{name}</div>
+                    <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5);">{file_display}</div>
+                </div>
+            </div>
+            <div style="flex: 1; color: #94a3b8; font-weight: 500;">
+                {status.title()}{dots}
+            </div>
+            <div style="flex: 1; text-align: center;">
+                <div style="background: rgba(255,255,255,0.1); border-radius: 4px; height: 8px; width: 100%; overflow: hidden;">
+                    <div style="background: linear-gradient(90deg, #10b981, #34d399); height: 100%; width: {pct}%; transition: width 0.3s;"></div>
+                </div>
+            </div>
+            <div style="flex: 0.8; text-align: right; color: #94a3b8; font-size: 1rem;">
+                {pct}% • {eta}s
+            </div>
+            <div style="flex: 0.5; text-align: right; color: #fca5a5; font-weight: 600;">
+                ${cost:.5f}
+            </div>
+        </div>'''
         st.markdown(minion_html, unsafe_allow_html=True)
 
 
@@ -665,21 +857,22 @@ def main():
             polling_needed = True
             status = check_job_status(jid)
             
-            # If state changed, update
+            # Update minion state on EVERY poll (not just when state changes)
+            # This ensures cost and ETA are updated in real-time
+            minion_id = job["minion_id"]
+            st.session_state.minions[minion_id] = {
+                "status": status["state"],
+                "file": job["file_name"],
+                "progress": status.get("progress", 0),
+                "eta": status.get("eta", 0),
+                "cost": status.get("cost", 0.0),
+                "job_id": jid
+            }
+            
+            # If state changed, update job status
             if status["state"] != job["status"]:
                 job["status"] = status["state"]
                 job["message"] = status["message"]
-                
-                # Update gremlin state
-                gremlin_id = job["minion_id"]
-                st.session_state.minions[gremlin_id] = {
-                    "status": status["state"],
-                    "file": job["file_name"],
-                    "progress": status.get("progress", 0),
-                    "eta": status.get("eta", 0),
-                    "cost": status.get("cost", 0.0),
-                    "job_id": jid
-                }
                 
                 if status["state"] == "complete":
                     job["results"] = status.get("data")
@@ -696,9 +889,10 @@ def main():
         st.markdown("### 📊 Extraction Results") # Reverting title to something more descriptive
         completed_jobs = [j for j in st.session_state.jobs.values() if j.get("results")]
         if completed_jobs:
-            # Sort by start time desc
-            latest_job = sorted(completed_jobs, key=lambda x: x["start_time"], reverse=True)[0]
-            render_results(latest_job["results"], unique_key=latest_job["file_name"])
+            # Merge results from all completed jobs
+            all_results = [j["results"] for j in completed_jobs]
+            merged_data = merge_results(all_results)
+            render_results(merged_data, unique_key="merged_results")
         else:
             st.markdown("""
             <div style="border: 2px dashed rgba(255,255,255,0.1); border-radius: 12px; padding: 4rem 2rem; text-align: center; color: rgba(255,255,255,0.3);">
