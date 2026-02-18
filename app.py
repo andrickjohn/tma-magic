@@ -473,77 +473,99 @@ def render_results(data: dict, unique_key: str):
     display_text = generate_excel_string(years_data, pad=True)
     excel_tsv = generate_excel_string(years_data, pad=False)
     
-    # Use Base64 to safely transfer the Excel data
+    # Use Base64 for clean data transfer
     import base64
     b64_data = base64.b64encode(excel_tsv.encode('utf-8')).decode('utf-8')
     
     st.success("✅ Extraction Complete")
+    st.toast("📋 Attempting auto-copy to clipboard...")
     
-    # Check if all jobs are actually finished (stable state)
+    # Check if all jobs are finished to ensure data is final
     all_done = all(j.get("status") == "complete" for j in st.session_state.jobs.values())
     
     copy_html = f"""
-    <div style="margin: 1rem 0; font-family: sans-serif;">
+    <div style="margin: 1rem 0; font-family: -apple-system, system-ui, sans-serif;">
         <button id="copyBtn" onclick="doCopy()" style="
             background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            color: white;
-            border: none;
-            padding: 0.75rem 2rem;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-            display: flex;
-            align-items: center;
-            gap: 8px;
+            color: white; border: none; padding: 0.85rem 2.5rem;
+            border-radius: 10px; font-size: 1.1rem; font-weight: 700;
+            cursor: pointer; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+            display: flex; align-items: center; gap: 10px;
         ">
-            📋 Copy Data to Clipboard
+            <span style="font-size: 1.3rem;">&#128203;</span> Copy Data to Clipboard
         </button>
-        <span id="copyMsg" style="margin-left: 1rem; color: #10b981; font-weight: 600;"></span>
+        <div id="copyMsg" style="margin-top: 0.75rem; color: #10b981; font-weight: 600; min-height: 1.5rem; font-size: 1rem;"></div>
     </div>
-    <textarea id="stash" style="position: absolute; left: -9999px;">{b64_data}</textarea>
+    
+    <input type="text" id="stash" value="{b64_data}" style="position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0.01; border: none; pointer-events: none;">
+    
     <script>
+    window.hasCopiedOnce = false;
+
     function doCopy() {{
-        const b64 = document.getElementById('stash').value;
-        const text = atob(b64);
-        const msg = document.getElementById('copyMsg');
-        
-        // Strategy: Create a temporary textarea for the copy operation
-        const el = document.createElement('textarea');
-        el.value = text;
-        document.body.appendChild(el);
-        el.select();
-        
+        try {{
+            const b64 = document.getElementById('stash').value;
+            const text = atob(b64);
+            const msg = document.getElementById('copyMsg');
+            
+            // Primary Method: Clipboard API
+            if (navigator.clipboard && navigator.clipboard.writeText) {{
+                navigator.clipboard.writeText(text).then(() => {{
+                    msg.innerHTML = '<span style="color: #10b981;">&#9989; Copied! Ready to paste into Excel</span>';
+                    window.hasCopiedOnce = true;
+                }}).catch(err => {{
+                    console.warn("Clipboard API failed, trying fallback");
+                    fallback(text, msg);
+                }});
+            }} else {{
+                fallback(text, msg);
+            }}
+        }} catch (e) {{ console.error(e); }}
+    }}
+    
+    function fallback(text, msgElem) {{
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
         try {{
             if (document.execCommand('copy')) {{
-                msg.textContent = '✅ Copied! Paste into Excel';
-                setTimeout(() => {{ msg.textContent = ''; }}, 4000);
+                msgElem.innerHTML = '<span style="color: #10b981;">&#9989; Copied! Ready to paste into Excel</span>';
+                window.hasCopiedOnce = true;
             }} else {{
-                msg.textContent = '⚠️ Blocked - Click the button';
-                msg.style.color = '#ef4444';
+                msgElem.innerHTML = '<span style="color: #f7b731;">&#9632; Click the green button to finish copying</span>';
             }}
         }} catch (err) {{
-            console.error('Copy Error:', err);
+            msgElem.innerHTML = '<span style="color: #eb4d4b;">❌ Error. Click the button manually.</span>';
         }}
-        document.body.removeChild(el);
+        document.body.removeChild(textArea);
     }}
 
-    // AUTO-COPY TRIGGER: 
-    // Only fire if the extraction is completely stable (all minions done)
-    if ({str(all_done).lower()}) {{
-        setTimeout(() => {{
-            // Programmatic click is the most reliable "auto" method in Chrome/Safari
-            const btn = document.getElementById('copyBtn');
-            if (btn) btn.click();
-        }}, 600);
-    }}
+    const triggerAuto = () => {{
+        if (!window.hasCopiedOnce && {str(all_done).lower()}) {{
+            doCopy();
+        }}
+    }};
+
+    // Aggressive triggers
+    setTimeout(triggerAuto, 400);   // Attempt 1
+    setTimeout(triggerAuto, 1500);  // Attempt 2 (Backup)
+    
+    // Interaction Hijack: Any mouse movement or focus triggers the copy
+    window.addEventListener('mousemove', triggerAuto, {{ once: true }});
+    window.addEventListener('focus', triggerAuto);
     </script>
     """
     
-    st.components.v1.html(copy_html, height=80)
+    st.components.v1.html(copy_html, height=100)
     st.markdown("**👀 Preview:**")
+    # Display formatted preview
     st.code(display_text, language="text")
+
 def get_funny_status(progress: float):
     """Return a funny status message based on progress."""
     if progress < 0.1: return "Reading pixels..."
