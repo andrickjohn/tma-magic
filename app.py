@@ -682,9 +682,14 @@ def render_worker_panel():
     total_eta = max((m["eta"] for m in minions.values()), default=0)
     total_cost = sum(m["cost"] for m in minions.values())
     
+    # Validation Warning: Check if configured mode can run
+    config = get_config()
+    needs_key = config.extraction_mode in ["ai_only", "hybrid"]
+    if needs_key and not config.has_api_key:
+        st.warning("⚠️ **API Key Missing**: AI Extraction is disabled. Go to **Settings** (top left) to enter your key.", icon="🔑")
+
     # Fun boss status messages - based on ACTUAL progress
     import random
-    if not assigned_minions:
         boss_status = "😎 Chillin'"
     elif len(completed_minions) == len(assigned_minions) and len(assigned_minions) > 0:
         boss_status = "✅ All Done!"

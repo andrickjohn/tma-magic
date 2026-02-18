@@ -96,8 +96,20 @@ def process_file(
     # 1. Initialization
     log("Initializing extraction engine...", 0.05)
     
+    # IMMEDIATE API KEY CHECK: Don't even try to read files if we need AI but have no key
+    is_ai_mode = mode in ["ai_only", "hybrid"]
+    if is_ai_mode and not api_key:
+        # We allow Hybrid to try Regex first, but we want to warn early
+        log("⚠️ No API Key! AI features disabled.", 0.05)
+        if mode == "ai_only":
+            raise ValueError("API KEY REQUIRED: Please enter your OpenAI key to use AI Extraction.")
+
     # Detect file type
-    file_type = detect_file_type(file_path)
+    try:
+        file_type = detect_file_type(file_path)
+    except Exception as e:
+        raise ValueError(f"File identification failed: {str(e)}")
+
     if file_type == "unknown":
         raise ValueError(f"Unsupported file type: {file_path.suffix}")
     
