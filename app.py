@@ -479,20 +479,20 @@ def render_results(data: dict, unique_key: str):
     import html as html_module
     escaped_data = html_module.escape(excel_tsv)
     
-    # Create unique IDs to prevent collisions (fixes the "graphic file" issue)
-    import time
-    unique_id = int(time.time() * 1000)
-    area_id = f"copy_area_{unique_id}"
-    status_id = f"copy_status_{unique_id}"
+    # STABLE IDs: Based on data content, not time
+    # This ensures the script isn't killed by the 1-second refresh loop
+    data_hash = str(len(excel_tsv)) + "_" + str(hash(excel_tsv) % 100000)
+    area_id = f"copy_area_{data_hash}"
+    status_id = f"copy_status_{data_hash}"
     
-    # Use hex codes for emojis to avoid encoding issues ()
-    icon_clipboard = "&#128203;" # 📋
-    icon_check = "&#9989;"      # ✅
-    icon_cross = "&#10060;"      # ❌
+    # Use hex codes for emojis
+    icon_clipboard = "&#128203;" 
+    icon_check = "&#9989;"      
+    icon_cross = "&#10060;"      
     
     copy_html = f"""
     <div style="margin: 1rem 0; font-family: sans-serif;">
-        <button onclick="performCopy()" style="
+        <button id="copyBtn_{data_hash}" onclick="performCopy()" style="
             background: linear-gradient(135deg, #10b981 0%, #059669 100%);
             color: white;
             border: none;
@@ -508,7 +508,7 @@ def render_results(data: dict, unique_key: str):
         ">
             <span>{icon_clipboard}</span> Copy Data to Clipboard
         </button>
-        <span id="{status_id}" style="margin-left: 1rem; font-weight: 600; transition: opacity 0.3s;"></span>
+        <span id="{status_id}" style="margin-left: 1rem; font-weight: 600;"></span>
     </div>
     <textarea id="{area_id}" style="position: absolute; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0;">{escaped_data}</textarea>
     <script>
@@ -537,14 +537,20 @@ def render_results(data: dict, unique_key: str):
         }}
     }}
     
-    // Immediate execution (no window.onload) with a tiny delay
-    setTimeout(performCopy, 200);
+    // Auto-copy with slight delay - now stable because IDs don't change until data does
+    setTimeout(() => {{
+        if (!window.hasAutoCopied_{data_hash}) {{
+            performCopy();
+            window.hasAutoCopied_{data_hash} = true;
+        }}
+    }}, 300);
     </script>
     """
     
-    st.components.v1.html(copy_html, height=80)
-    st.markdown("**👀 Preview:**")
+    st.components.v1.html(copy_html, height=80, key=f"clipboard_{data_hash}")
+    st.markdown("**�� Preview:**")
     st.code(display_text, language="text")
+
 def get_funny_status(progress: float):
     """Return a funny status message based on progress."""
     if progress < 0.1: return "Reading pixels..."
