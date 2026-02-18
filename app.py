@@ -475,20 +475,13 @@ def render_results(data: dict, unique_key: str):
     
     st.success("✅ Extraction Complete")
     
-    # Properly escape HTML entities in the TSV data
+    # Properly escape HTML entities
     import html as html_module
     escaped_data = html_module.escape(excel_tsv)
     
-    # Using stable data hash to prevent iframe refresh loops
-    data_hash = str(len(excel_tsv)) + "_" + str(hash(excel_tsv) % 100000)
-    status_id = f"status_{data_hash}"
-    area_id = f"data_{data_hash}"
-    btn_id = f"btn_{data_hash}"
-    
-    # Create the exact version you liked, with stable IDs
     copy_html = f"""
     <div style="margin: 1rem 0; font-family: sans-serif;">
-        <button id="{btn_id}" onclick="copyData()" style="
+        <button id="copyBtn" onclick="copyData()" style="
             background: linear-gradient(135deg, #10b981 0%, #059669 100%);
             color: white;
             border: none;
@@ -504,29 +497,26 @@ def render_results(data: dict, unique_key: str):
         ">
             📋 Copy Data to Clipboard
         </button>
-        <span id="{status_id}" style="margin-left: 1rem; color: #10b981; font-weight: 600;"></span>
+        <span id="copyStatus" style="margin-left: 1rem; color: #10b981; font-weight: 600;"></span>
     </div>
-    <textarea id="{area_id}" style="position: absolute; left: -9999px;">{escaped_data}</textarea>
+    <textarea id="hiddenData" style="position: absolute; left: -9999px; top: 0; width: 1px; height: 1px;">{escaped_data}</textarea>
     <script>
     function copyData() {{
-        const textarea = document.getElementById('{area_id}');
-        const status = document.getElementById('{status_id}');
-        if (!textarea || !status) return;
-        
-        textarea.select();
-        textarea.setSelectionRange(0, 99999);
-        const successful = document.execCommand('copy');
-        
-        if (successful) {{
-            status.textContent = '✅ Copied! Paste into Excel';
-            setTimeout(() => {{ status.textContent = ''; }}, 4000);
+        const textArea = document.getElementById('hiddenData');
+        const status = document.getElementById('copyStatus');
+        textArea.select();
+        textArea.setSelectionRange(0, 99999);
+        try {{
+            if (document.execCommand('copy')) {{
+                status.textContent = '✅ Copied! Paste into Excel';
+                setTimeout(() => {{ status.textContent = ''; }}, 4000);
+            }}
+        }} catch (err) {{
+            console.error('Copy failed', err);
         }}
     }}
-    // PROGRAMMATIC CLICK: Call the button automatically
-    setTimeout(() => {{
-        const btn = document.getElementById('{btn_id}');
-        if (btn) btn.click();
-    }}, 300);
+    // Auto-copy on load (this is what worked before)
+    setTimeout(copyData, 200);
     </script>
     """
     
