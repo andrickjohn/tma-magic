@@ -477,8 +477,7 @@ def render_results(data: dict, unique_key: str):
     import base64
     b64_data = base64.b64encode(excel_tsv.encode('utf-8')).decode('utf-8')
     
-    st.success("✅ Extraction Complete")
-    st.toast("📋 Attempting auto-copy to clipboard...")
+    st.success("**✅ EXTRACTION COMPLETE & DATA COPIED TO CLIPBOARD**")
     
     # Check if all jobs are finished to ensure data is final
     all_done = all(j.get("status") == "complete" for j in st.session_state.jobs.values())
@@ -511,7 +510,7 @@ def render_results(data: dict, unique_key: str):
             // Primary Method: Clipboard API
             if (navigator.clipboard && navigator.clipboard.writeText) {{
                 navigator.clipboard.writeText(text).then(() => {{
-                    msg.innerHTML = '<span style="color: #10b981;">&#9989; Copied! Ready to paste into Excel</span>';
+                    msg.innerHTML = '<span style="color: #00ff88; font-weight: 900;">&#9989; COPIED! Ready to paste into Excel</span>';
                     window.hasCopiedOnce = true;
                 }}).catch(err => {{
                     console.warn("Clipboard API failed, trying fallback");
@@ -534,13 +533,13 @@ def render_results(data: dict, unique_key: str):
         textArea.select();
         try {{
             if (document.execCommand('copy')) {{
-                msgElem.innerHTML = '<span style="color: #10b981;">&#9989; Copied! Ready to paste into Excel</span>';
+                msgElem.innerHTML = '<span style="color: #00ff88; font-weight: 900;">&#9989; COPIED! Ready to paste into Excel</span>';
                 window.hasCopiedOnce = true;
             }} else {{
-                msgElem.innerHTML = '<span style="color: #f7b731;">&#9632; Click the green button to finish copying</span>';
+                msgElem.innerHTML = '<span style="color: #ffcc00; font-weight: 900;">&#9632; CLICK THE GREEN BUTTON ABOVE TO COPY</span>';
             }}
         }} catch (err) {{
-            msgElem.innerHTML = '<span style="color: #eb4d4b;">❌ Error. Click the button manually.</span>';
+            msgElem.innerHTML = '<span style="color: #ff4444; font-weight: 900;">❌ ERROR. Click the button manually.</span>';
         }}
         document.body.removeChild(textArea);
     }}
