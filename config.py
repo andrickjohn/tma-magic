@@ -53,15 +53,27 @@ class Config:
         return get_config_dir() / "config.json"
     
     def _load(self):
-        """Load config from disk."""
+        """Load config from disk or Streamlit secrets."""
+        # 1. Start with defaults
+        self._config = self._defaults()
+        
+        # 2. Try loading from file
         if self.config_file.exists():
             try:
-                self._config = json.loads(self.config_file.read_text())
+                local_config = json.loads(self.config_file.read_text())
+                self._config.update(local_config)
             except json.JSONDecodeError:
-                self._config = {}
-        else:
-            self._config = self._defaults()
-            self._save()
+                pass
+        
+        # 3. OVERRIDE with Streamlit Secrets if available (Cloud Deployment)
+        try:
+            import streamlit as st
+            if "general" in st.secrets:
+                if "openai_api_key" in st.secrets["general"]:
+                    self._config["openai_api_key"] = st.secrets["general"]["openai_api_key"]
+        except:
+            # Fallback if st.secrets is not available (local run)
+            pass
     
     def _defaults(self) -> Dict[str, Any]:
         """Default configuration values."""
