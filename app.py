@@ -475,14 +475,24 @@ def render_results(data: dict, unique_key: str):
     
     st.success("✅ Extraction Complete")
     
-    # Properly escape HTML entities in the TSV data
+    # Properly escape HTML entities
     import html as html_module
     escaped_data = html_module.escape(excel_tsv)
     
-    # Create a copy button with the data
+    # Create unique IDs to prevent collisions (fixes the "graphic file" issue)
+    import time
+    unique_id = int(time.time() * 1000)
+    area_id = f"copy_area_{unique_id}"
+    status_id = f"copy_status_{unique_id}"
+    
+    # Use hex codes for emojis to avoid encoding issues ()
+    icon_clipboard = "&#128203;" # 📋
+    icon_check = "&#9989;"      # ✅
+    icon_cross = "&#10060;"      # ❌
+    
     copy_html = f"""
-    <div style="margin: 1rem 0;">
-        <button id="copyBtn" onclick="copyData()" style="
+    <div style="margin: 1rem 0; font-family: sans-serif;">
+        <button onclick="performCopy()" style="
             background: linear-gradient(135deg, #10b981 0%, #059669 100%);
             color: white;
             border: none;
@@ -492,31 +502,48 @@ def render_results(data: dict, unique_key: str):
             font-weight: 600;
             cursor: pointer;
             box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 8px;
         ">
-            📋 Copy Data to Clipboard
+            <span>{icon_clipboard}</span> Copy Data to Clipboard
         </button>
-        <span id="status" style="margin-left: 1rem; color: #10b981; font-weight: 600;"></span>
+        <span id="{status_id}" style="margin-left: 1rem; font-weight: 600; transition: opacity 0.3s;"></span>
     </div>
-    <textarea id="data" style="position: absolute; left: -9999px;">{escaped_data}</textarea>
+    <textarea id="{area_id}" style="position: absolute; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0;">{escaped_data}</textarea>
     <script>
-    function copyData() {{
-        const textarea = document.getElementById('data');
-        const status = document.getElementById('status');
-        textarea.select();
-        textarea.setSelectionRange(0, 99999);
-        document.execCommand('copy');
-        status.textContent = '✅ Copied! Paste into Excel';
-        setTimeout(() => {{ status.textContent = ''; }}, 3000);
+    function performCopy() {{
+        const textArea = document.getElementById('{area_id}');
+        const status = document.getElementById('{status_id}');
+        if (!textArea || !status) return;
+        
+        textArea.focus();
+        textArea.select();
+        textArea.setSelectionRange(0, 99999);
+        
+        try {{
+            const successful = document.execCommand('copy');
+            if (successful) {{
+                status.innerHTML = '{icon_check} Copied! Paste into Excel';
+                status.style.color = '#10b981';
+                setTimeout(() => {{ status.innerHTML = ''; }}, 4000);
+            }} else {{
+                status.innerHTML = '{icon_cross} Auto-copy blocked - click button';
+                status.style.color = '#ef4444';
+            }}
+        }} catch (err) {{
+            status.innerHTML = '{icon_cross} Error copying';
+            status.style.color = '#ef4444';
+        }}
     }}
-    // Try auto-copy on load
-    setTimeout(() => {{ copyData(); }}, 200);
+    
+    // Immediate execution (no window.onload) with a tiny delay
+    setTimeout(performCopy, 200);
     </script>
     """
     
-    components.html(copy_html, height=80)
-    
+    st.components.v1.html(copy_html, height=80)
     st.markdown("**👀 Preview:**")
-    # Display formatted preview
     st.code(display_text, language="text")
 def get_funny_status(progress: float):
     """Return a funny status message based on progress."""
