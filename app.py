@@ -473,57 +473,76 @@ def render_results(data: dict, unique_key: str):
     display_text = generate_excel_string(years_data, pad=True)
     excel_tsv = generate_excel_string(years_data, pad=False)
     
+    # Use Base64 to safely transfer data
+    import base64
+    b64_data = base64.b64encode(excel_tsv.encode('utf-8')).decode('utf-8')
+    
     st.success("✅ Extraction Complete")
     
-    # Properly escape HTML entities
-    import html as html_module
-    escaped_data = html_module.escape(excel_tsv)
-    
+    # Improved Copy Component
     copy_html = f"""
-    <div style="margin: 1rem 0; font-family: sans-serif;">
-        <button id="copyBtn" onclick="copyData()" style="
+    <div style="margin: 0.5rem 0; font-family: sans-serif;">
+        <button id="proxyBtn" onclick="executeCopy()" style="
             background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            color: white;
-            border: none;
-            padding: 0.75rem 2rem;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-            display: flex;
-            align-items: center;
-            gap: 8px;
+            color: white; border: none; padding: 0.75rem 2rem;
+            border-radius: 8px; font-size: 1rem; font-weight: 600;
+            cursor: pointer; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            display: flex; align-items: center; gap: 8px;
         ">
             📋 Copy Data to Clipboard
         </button>
-        <span id="copyStatus" style="margin-left: 1rem; color: #10b981; font-weight: 600;"></span>
+        <span id="statusMsg" style="margin-left: 1rem; color: #10b981; font-weight: 600;"></span>
     </div>
-    <textarea id="hiddenData" style="position: absolute; left: -9999px; top: 0; width: 1px; height: 1px;">{escaped_data}</textarea>
+    <input type="text" id="encodedData" value="{b64_data}" style="position: absolute; left: -9999px;">
+    
     <script>
-    function copyData() {{
-        const textArea = document.getElementById('hiddenData');
-        const status = document.getElementById('copyStatus');
-        textArea.select();
-        textArea.setSelectionRange(0, 99999);
+    function executeCopy() {{
+        const b64 = document.getElementById('encodedData').value;
+        const text = atob(b64);
+        const status = document.getElementById('statusMsg');
+        
+        // Strategy: Try selecting a visible-ish element
+        const el = document.createElement('textarea');
+        el.value = text;
+        el.setAttribute('readonly', '');
+        el.style.position = 'absolute';
+        el.style.left = '0'; 
+        el.style.top = '0';
+        el.style.width = '1px';
+        el.style.height = '1px';
+        el.style.opacity = '0.01';
+        document.body.appendChild(el);
+        
+        el.focus();
+        el.select();
+        
         try {{
-            if (document.execCommand('copy')) {{
+            const success = document.execCommand('copy');
+            if (success) {{
                 status.textContent = '✅ Copied! Paste into Excel';
+                status.style.color = '#10b981';
                 setTimeout(() => {{ status.textContent = ''; }}, 4000);
+            }} else {{
+                status.textContent = '❌ Blocked - Click the button';
+                status.style.color = '#ef4444';
             }}
         }} catch (err) {{
-            console.error('Copy failed', err);
+            status.textContent = '❌ Error - Click the button';
+            status.style.color = '#ef4444';
         }}
+        document.body.removeChild(el);
     }}
-    // Auto-copy on load (this is what worked before)
-    setTimeout(copyData, 200);
+    
+    // Auto-Copy Trigger
+    // We try multiple times with different delays
+    setTimeout(executeCopy, 300);
+    setTimeout(executeCopy, 1000);
     </script>
     """
     
-    st.components.v1.html(copy_html, height=80)
+    components.html(copy_html, height=70)
     st.markdown("**👀 Preview:**")
     st.code(display_text, language="text")
-def get_funny_status(progress: float):
     """Return a funny status message based on progress."""
     if progress < 0.1: return "Reading pixels..."
     if progress < 0.3: return "Combobulating data..."
