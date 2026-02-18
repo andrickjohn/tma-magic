@@ -690,6 +690,7 @@ def render_worker_panel():
 
     # Fun boss status messages - based on ACTUAL progress
     import random
+    if not assigned_minions:
         boss_status = "😎 Chillin'"
     elif len(completed_minions) == len(assigned_minions) and len(assigned_minions) > 0:
         boss_status = "✅ All Done!"
